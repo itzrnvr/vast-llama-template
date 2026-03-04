@@ -1,9 +1,8 @@
 #!/bin/bash
-set -e
 
 # Install dependencies
-apt-get update && apt-get install -y caddy python3-pip >/dev/null 2>&1
-pip3 install gpustat flask >/dev/null 2>&1
+apt-get update && apt-get install -y caddy python3-pip >/dev/null 2>&1 || true
+pip3 install gpustat flask >/dev/null 2>&1 || true
 
 # GPU Dashboard
 cat >/root/gpu-dashboard.py <<'EOF'
@@ -42,19 +41,22 @@ EOF
 
 chmod +x /root/gpu-dashboard.py
 
-# Setup Caddy for request/response logging
+# Modify LLAMA_ARGS to use internal port 18001 (Caddy will proxy to it)
+export LLAMA_ARGS="${LLAMA_ARGS/--port 18000/--port 18001}"
+
+# Setup Caddy for request/response logging on port 18000, proxying to llama on 18001
 cat >/etc/caddy/Caddyfile <<'EOF'
 :18000 {
     log {
         output file /root/access.log
         format json
     }
-    reverse_proxy localhost:18000
+    reverse_proxy localhost:18001
 }
 EOF
 
-caddy run --config /etc/caddy/Caddyfile --adapter caddyfile &
-python3 /root/gpu-dashboard.py &
+nohup caddy run --config /etc/caddy/Caddyfile --adapter caddyfile > /root/caddy.log 2>&1 &
+nohup python3 /root/gpu-dashboard.py > /root/gpu-dashboard.log 2>&1 &
 
 # Log Viewer
 mkdir -p /root/log-viewer
@@ -68,25 +70,31 @@ cat >/root/log-viewer/index.html <<'EOF'
 </head><body>
 <h2 style="color:#0f0">Server Logs</h2>
 <pre id="logs"></pre>
-<script>fetch("/logs").then(r=>r.text()).then(d=>document.getElementById("logs").innerHTML=d);</script>
+<script>fetch("/logs.txt").then(r=>r.text()).then(d=>document.getElementById("logs").innerHTML=d);</script>
 </body></html>
 EOF
 
-python3 -m http.server 9000 -d /root/log-viewer &
+nohup python3 -m http.server 9000 -d /root/log-viewer > /root/log-server.log 2>&1 &
 
 # Log fetcher
+(
 while true; do
     {
-        echo "=== ACCESS LOG ==="
-        tail -n 50 /root/access.log 2>/dev/null
+        echo "=== ACCESS LOG ($(date)) ==="
+        tail -n 50 /root/access.log 2>/dev/null || echo "No access log yet"
         echo ""
-        echo "=== LLAMA SERVER LOG ==="
-        tail -n 50 /root/llama-server.log 2>/dev/null
+        echo "=== LLAMA SERVER LOG ($(date)) ==="
+        tail -n 50 /root/llama-server.log 2>/dev/null || echo "No llama log yet"
     } > /root/log-viewer/logs.txt
     sleep 1
-done &
+done
+) &
 
-echo "Monitoring ready: Logs on port 9000, GPU Stats on port 9001"
+sleep 2
+echo "=== Monitoring Ready ==="
+echo "Logs:      port 9000"
+echo "GPU Stats: port 9001"
+echo "API:       port 8000 (proxied through Caddy on 18000)"
 
 # Run original entrypoint
 exec entrypoint.sh
