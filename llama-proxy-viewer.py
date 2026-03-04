@@ -21,10 +21,7 @@ VIEWER_PORT = 9000
 GPU_STATS_PORT = 9001
 SERVER_LOG_FILE = '/root/llama-server.log'
 JSONL_LOG_FILE = '/root/requests.jsonl'
-MAX_REQUESTS = 30
-POLL_INTERVAL_MS = 2000
-
-JSONL_WEBHOOK_URL = os.environ.get('JSONL_WEBHOOK_URL', '')
+MAX_REQUESTS = 100
 
 requests_db = deque(maxlen=MAX_REQUESTS)
 requests_lock = threading.Lock()
@@ -52,26 +49,12 @@ def write_jsonl(req_id, method, path, headers, body, response_status, response_h
         "duration_ms": duration
     }
     
-    record_str = json.dumps(record, ensure_ascii=False)
-    
     with jsonl_lock:
         try:
             f = get_jsonl_file()
-            f.write(record_str + '\n')
+            f.write(json.dumps(record, ensure_ascii=False) + '\n')
         except Exception as e:
             print(f"JSONL write error: {e}")
-    
-    if JSONL_WEBHOOK_URL:
-        try:
-            import urllib.request
-            req = urllib.request.Request(
-                JSONL_WEBHOOK_URL,
-                data=record_str.encode(),
-                headers={'Content-Type': 'application/json'}
-            )
-            urllib.request.urlopen(req, timeout=5)
-        except Exception as e:
-            print(f"Webhook error: {e}")
 
 def truncate_json(json_str, max_len=50000):
     if len(json_str) <= max_len:
@@ -658,7 +641,7 @@ HTML = '''<!DOCTYPE html>
                 });
         }
         
-        setInterval(fetchRequests, 2000);
+        setInterval(fetchRequests, 500);
         fetchRequests();
     </script>
 </body>
