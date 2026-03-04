@@ -1,131 +1,168 @@
-# LLaMA.cpp Auto-Setup with Web Monitoring
+# Vast.ai Llama.cpp Template with Real-time Monitoring
 
-A complete automated setup script for LLaMA.cpp server with real-time web monitoring dashboard.
+Complete monitoring solution for interruptible Vast.ai instances with real-time log sync to your local machine.
 
-## What It Does
+## 🚀 Quick Start
 
-1. **Downloads & builds** latest LLaMA.cpp with CUDA support
-2. **Downloads** the Crow-9B-Opus-4.6 model (Q5_K_M quantization)
-3. **Starts** the server with 131k context and full GPU offloading
-4. **Launches** a web monitoring portal on port 8081
+### 1. Launch Instance
+Use template `Qwen3.5-35B-heretic-v2-Q5KM` on Vast.ai or create from template ID `355728`.
 
-## Quick Start
-
+### 2. Start Log Sync (on your Mac)
 ```bash
-# On your new Vast.ai / RunPod / any GPU instance:
-scp -P <SSH_PORT> -i ~/.ssh/id_ed25519 setup-llama.sh root@<IP>:/root/
-ssh -p <SSH_PORT> -i ~/.ssh/id_ed25519 root@<IP> "bash /root/setup-llama.sh"
+./start-log-sync.sh [INSTANCE_ID]
 ```
 
-Or run directly:
+This will:
+- Create SSH tunnels for all services
+- Start real-time log sync to `~/llama-logs/requests.jsonl`
+- Open local viewer at http://localhost:8768
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/yourrepo/main/setup-llama.sh | bash
+### 3. Access Services
+- **API**: http://localhost:8000 (OpenAI-compatible)
+- **Request Logs**: http://localhost:9000 (full request/response inspector)
+- **GPU Stats**: http://localhost:9001 (real-time GPU monitoring)
+- **Local Viewer**: http://localhost:8768 (synced logs on your Mac)
+
+## 📊 Features
+
+### Request/Response Logging
+- Every request and response captured in full
+- JSONL format for easy parsing and analytics
+- Web UI with filtering, search, and JSON formatting
+- Shows reasoning_content for thinking models
+
+### Real-time Sync to Local Machine
+- Logs stream from remote instance to your Mac via WebSocket
+- Survives instance interruptions (data saved locally)
+- Use for analytics, training datasets, or debugging
+
+### GPU Monitoring
+- Real-time temperature, utilization, VRAM
+- Power draw and clock speeds
+- Auto-refresh every second
+
+### Performance Optimized
+- Virtual scrolling in browser (handles 10k+ requests)
+- Batched log transmission
+- Local file append (not rewrite)
+
+## 📁 Files
+
+| File | Purpose | Location |
+|------|---------|----------|
+| `template-onstart.sh` | Instance setup script | Remote: downloaded on start |
+| `llama-proxy-viewer.py` | Proxy + Web UI + JSONL logger | Remote: `/root/` |
+| `remote-log-forwarder.py` | Sends logs to your Mac | Remote: `/root/` |
+| `local-log-forwarder.py` | Receives and saves logs | Local: your Mac |
+| `start-log-sync.sh` | One-command setup | Local: your Mac |
+
+## 💾 Log Format (JSONL)
+
+Each line is a complete JSON object:
+```json
+{
+  "timestamp": "2026-03-05T12:34:56.789",
+  "id": "1234567890",
+  "method": "POST",
+  "path": "/v1/chat/completions",
+  "headers": {...},
+  "body": "{\"model\": \"...\", \"messages\": [...]}",
+  "response_status": 200,
+  "response_headers": {...},
+  "response_body": "{\"choices\": [...]}",
+  "duration_ms": 1234.5
+}
 ```
 
-## Web Monitoring Portal
+## 🔍 Use Cases
 
-Once running, the script provides:
+1. **Debugging**: Full request/response trace
+2. **Analytics**: Token usage, latency, error rates
+3. **Training Data**: Capture conversations for fine-tuning
+4. **Monitoring**: Real-time performance tracking
+5. **Compliance**: Complete audit trail
 
-### URLs
-- **Monitor Dashboard**: `http://<IP>:8081` (or Vast-mapped port)
-- **LLaMA API**: `http://<IP>:8080` (or Vast-mapped port)
-- **Anthropic API**: `http://<IP>:8080/v1/messages`
+## 🛠️ Manual Setup
 
-### Features
-- ✅ Real-time server status (online/offline)
-- ✅ GPU memory usage with visual progress bar
-- ✅ GPU temperature and utilization
-- ✅ Live log streaming
-- ✅ Endpoint URLs displayed
-
-## API Usage Examples
-
-### OpenAI-compatible:
-```bash
-curl -X POST http://<IP>:8080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "Crow-9B-Q5_K_M.gguf",
-    "messages": [{"role": "user", "content": "Hello!"}],
-    "max_tokens": 100
-  }'
-```
-
-### Anthropic-compatible:
-```bash
-curl -X POST http://<IP>:8080/v1/messages \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "Crow-9B-Q5_K_M.gguf",
-    "messages": [{"role": "user", "content": "Hello!"}],
-    "max_tokens": 100
-  }'
-```
-
-## Configuration
-
-Edit these variables at the top of `setup-llama.sh`:
+If you prefer manual control:
 
 ```bash
-MODEL_URL="https://huggingface.co/..."  # Change model
-CONTEXT_SIZE=131072                        # Change context
-WEB_PORT=8081                              # Monitor port
-API_PORT=8080                              # LLaMA API port
+# On remote instance
+wget https://raw.githubusercontent.com/itzrnvr/vast-llama-template/main/llama-proxy-viewer.py
+python3 llama-proxy-viewer.py
+
+# On your Mac (in another terminal)
+ssh -L 8767:localhost:8767 -L 9000:localhost:9000 -L 9001:localhost:9001 root@<instance-ip> -p <port>
+python3 local-log-forwarder.py
 ```
 
-## Requirements
+## ⚠️ Interruptible Instance Notes
 
-- **GPU**: NVIDIA with CUDA 11.8+ (tested on RTX 3060 12GB)
-- **RAM**: 8GB+ system RAM
-- **Disk**: 10GB free space
-- **OS**: Ubuntu 20.04+ / Debian-based
+- **Data Loss Prevention**: Logs sync in real-time to your Mac
+- **Auto-reconnect**: Forwarder automatically reconnects if SSH tunnel drops
+- **Resume**: If instance stops, restart `start-log-sync.sh` to resume
+- **JSONL**: Local file grows continuously, survives any interruption
 
-## Monitoring
+## 📈 Analytics Example
 
-### View logs:
+```python
+import json
+
+# Analyze your logs
+with open('~/llama-logs/requests.jsonl') as f:
+    for line in f:
+        req = json.loads(line)
+        print(f"{req['duration_ms']}ms - {req['path']}")
+```
+
+## 🔧 Troubleshooting
+
+**Port already in use:**
 ```bash
-tail -f /tmp/llama-server.log
-tail -f /tmp/llama-setup.log
+pkill -f start-log-sync
+./start-log-sync.sh
 ```
 
-### Check GPU:
-```bash
-nvidia-smi
+**No logs appearing:**
+- Check SSH tunnel: `ssh -p <port> root@<host> "tail /root/requests.jsonl"`
+- Check forwarder: `ssh -p <port> root@<host> "tail /root/forwarder.log"`
+
+**Slow browser:**
+- Local viewer only shows last 100 requests
+- Use filters to reduce what's displayed
+- Download JSONL for offline analysis
+
+## 📚 Architecture
+
+```
+┌─────────────────┐     SSH Tunnel      ┌──────────────────┐
+│   Your Mac      │ ◄─────────────────► │  Vast.ai Instance│
+│                 │                     │                  │
+│ ┌─────────────┐ │                     │ ┌──────────────┐ │
+│ │Local Viewer │ │◄──WebSocket (8767)──│ │Log Forwarder │ │
+│ │  (8768)     │ │                     │ │              │ │
+│ └─────────────┘ │                     │ └──────────────┘ │
+│        ▲        │                     │        ▲         │
+│        │        │                     │        │         │
+│ ┌─────────────┐ │                     │ ┌──────────────┐ │
+│ │  JSONL File │ │                     │ │  JSONL File  │ │
+│ │  (persist)  │ │                     │ │  (temporary) │ │
+│ └─────────────┘ │                     │ └──────────────┘ │
+└─────────────────┘                     │        ▲         │
+                                        │        │         │
+                                        │ ┌──────────────┐ │
+                                        │ │Proxy+Viewer  │ │
+                                        │ │  (9000/9001) │ │
+                                        │ └──────────────┘ │
+                                        │        ▲         │
+                                        │        │         │
+                                        │ ┌──────────────┐ │
+                                        │ │Llama Server  │ │
+                                        │ │  (18001)     │ │
+                                        │ └──────────────┘ │
+                                        └──────────────────┘
 ```
 
-### Stop server:
-```bash
-pkill -f llama-server
-```
+## 🤝 Contributing
 
-## Troubleshooting
-
-### Server won't start
-Check logs: `tail -100 /tmp/llama-server.log`
-
-### GPU out of memory
-Reduce context size: Edit `CONTEXT_SIZE=65536` in the script
-
-### Port already in use
-Kill existing: `pkill -f llama-server` or change `API_PORT`
-
-### SSH connection issues
-Wait 2-3 minutes after instance creation for SSH to be ready
-
-## Performance Expectations
-
-**RTX 3060 12GB:**
-- Generation: ~40-45 tokens/sec
-- Prompt processing: ~250-350 tokens/sec
-- Context: 131,072 tokens
-- VRAM usage: ~10.5GB
-
-**RTX 4090 24GB:**
-- Generation: ~100-130 tokens/sec
-- Prompt processing: ~800-1000 tokens/sec
-- Context: 131,072 tokens (or higher)
-
-## License
-
-MIT - Feel free to modify and distribute.
+All scripts are in this repo. Modify and push - new instances will use the updated version automatically.
